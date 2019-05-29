@@ -6,6 +6,15 @@ Native node module, and C++ library for Adblock Plus filter parsing for lists li
 
 It uses a bloom filter and Rabin-Karp algorithm to be super fast.
 
+## Compatibility
+
+This project supports almost all of the
+[EasyList](https://adblockplus.org/filters) rule formats.  It also supports
+some rule formats specific to other projects, like [uBlock](https://github.com/gorhill/uBlock/)
+and [AdGuard](https://adguard.com/en/welcome.html). For more details on
+what rule formats are supported, please see 
+ [compatibility wiki page](https://github.com/brave/ad-block/wiki/Filter-List-Format-Compatibility).
+
 ## To include brave/ad-block in your project:
 
 ```
@@ -16,7 +25,7 @@ npm install --save ad-block
 
 ```javascript
 
-const {AdBlockClient, FilterOptions} = require('ad-block')
+const { AdBlockClient, FilterOptions } = require('ad-block')
 const client = new AdBlockClient()
 client.parse('/public/ad/*$domain=slashdot.org')
 client.parse('/public/ad3/*$script')
@@ -34,7 +43,6 @@ console.log('public/ad/* should not match b2.  Actual: ', b2)
 #include <iostream>
 #include <fstream>
 #include <sstream>
-#include <iostream>
 #include <string>
 
 using namespace std;
@@ -94,7 +102,7 @@ int main(int argc, char**argv) {
 
   int size;
   // This buffer is allocate on the heap, you must call delete[] when you're done using it.
-  char *buffer = client.serialize(size);
+  char *buffer = client.serialize(&size);
   writeFile("./ABPFilterParserData.dat", buffer, size);
 
   AdBlockClient client2;
@@ -144,6 +152,13 @@ int main(int argc, char**argv) {
 
     `npm install`
 
+4. Install ninja:
+	##### MAC
+	     brew install ninja
+
+	##### WINDOWS
+
+	Go to the releases page of the Ninja build tool, and download a suitable binary for Windows. Place ninja.exe in a suitable spot. For example, C:\Ninja. Now make sure that CMake can find ninja.exe by adding C:\Ninja to your %PATH%.
 
 ## Make the node module
 

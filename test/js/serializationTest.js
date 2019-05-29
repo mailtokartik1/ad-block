@@ -4,8 +4,8 @@
 /* global describe, it, before */
 
 const assert = require('assert')
-const {makeAdBlockClientFromString} = require('../../lib/util')
-const {AdBlockClient, FilterOptions} = require('../..')
+const { makeAdBlockClientFromString } = require('../../lib/util')
+const { AdBlockClient, FilterOptions } = require('../..')
 
 describe('serialization', function () {
   before(function (cb) {
@@ -29,6 +29,8 @@ describe('serialization', function () {
       this.data = this.client.serialize()
       this.client2 = new AdBlockClient()
       this.client2.deserialize(this.data)
+      // Just to make sure things work properly with repeated deserializes
+      this.client2.deserialize(this.data)
       cb()
     })
   })
@@ -41,16 +43,62 @@ describe('serialization', function () {
   })
   it('deserialized client serializes the same', function () {
     this.client2.deserialize(this.data)
+    // Just to make sure things work properly with repeated deserializes
+    this.client2.deserialize(this.data)
     const data2 = this.client2.serialize()
     assert(this.data.equals(data2))
   })
   it('deserializes with the same number of filters', function () {
-    const nonComentFilterCount = 11
-    assert.equal(this.client.getParsingStats().numFilters, nonComentFilterCount)
-    assert.equal(this.client2.getParsingStats().numFilters, nonComentFilterCount)
+    const nonCommentFilterCount = 11
+    assert.strictEqual(this.client.getParsingStats().numFilters, nonCommentFilterCount)
+    assert.strictEqual(this.client2.getParsingStats().numFilters, nonCommentFilterCount)
   })
   it('serialized data does not include comment data', function () {
     assert(!this.data.toString().includes('comment'))
     assert(!this.data.toString().includes('Adblock Plus'))
+  })
+
+  describe('deserializing input', function () {
+    it('does not throw on valid input', function () {
+      const client = new AdBlockClient()
+      client.deserialize(this.data)
+      // Just to make sure things work properly with repeated deserializes
+      client.deserialize(this.data)
+    })
+
+    it('throws on invalid input', function () {
+      const badInput = 'not-good-data'
+      let caughtError = false
+      const newClient = new AdBlockClient()
+      // Check to make sure the below doesn't throw
+      try {
+        newClient.deserialize(badInput)
+        // Just to make sure things work properly with repeated deserializes
+        newClient.deserialize(badInput)
+      } catch (_) {
+        caughtError = true
+      }
+      assert(caughtError)
+    })
+  })
+  describe('tags', function () {
+    it('preserves filter tags', function () {
+      const client = new AdBlockClient()
+      client.parse('testfilter$third-party,tag=blah')
+      const filters1 = client.getFilters('filters')
+      console.log('filters1', filters1)
+      assert.strictEqual(filters1.length, 1)
+      assert.strictEqual(filters1[0].tag, 'blah')
+
+      const data = client.serialize()
+      const client2 = new AdBlockClient()
+      client2.deserialize(data)
+      // Just to make sure things work properly with repeated deserializes
+      client2.deserialize(data)
+      const filters2 = client2.getFilters('filters')
+      console.log('filters2', filters2)
+      assert.strictEqual(filters2.length, 1)
+      assert.strictEqual(filters2[0].tag, 'blah')
+    })
   })
 })

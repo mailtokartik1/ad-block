@@ -5,12 +5,13 @@
 
 #ifndef FILTER_H_
 #define FILTER_H_
-
 #include <stdint.h>
 #include <string.h>
 #include "./base.h"
+#include "./context_domain.h"
 
 class BloomFilter;
+template <typename T> class HashSet;
 
 enum FilterType {
   FTNoFilterType = 0,
@@ -47,12 +48,41 @@ enum FilterOption {
   FOCollapse = 02000,
   FODoNotTrack = 04000,
   FOElemHide = 010000,
-  FOThirdParty = 020000,  // Used internally only, do not use
-  FONotThirdParty = 040000,  // Used internally only, do not use
-  FOPing = 0100000,  // Not supported, but we will ignore these rules
+  // Used internally only, do not use
+  FOThirdParty = 020000,
+  // Used internally only, do not use
+  FONotThirdParty = 040000,
+  // Not supported, but we will ignore these rules
+  FOPing = 0100000,
+  // Not supported, but we will ignore these rules
+  FOPopup = 0200000,
+  // This is only used by uBlock and currently all instances are 1x1
+  // transparent gif which we already do for images
+  FORedirect = 0400000,
+  // Parse CSPs but consider them unsupported
+  FOCSP = 01000000,
+  FOFont = 02000000,
+  FOMedia = 04000000,
+  FOWebRTC = 010000000,
+  FOGenericHide = 020000000,
+  FOGenericBlock = 040000000,
+  // Used by Adguard, purpose unknown, ignore
+  FOEmpty = 0100000000,
+  FOWebsocket = 0200000000,
+  // important means to ignore all exception filters (those prefixed with @@).
+  FOImportant = 0400000000,
+  // Cancel the request instead of using a 200 OK response
+  FOExplicitCancel = 01000000000,
+
+  FOUnknown = 04000000000,
   FOResourcesOnly = FOScript|FOImage|FOStylesheet|FOObject|FOXmlHttpRequest|
-    FOObjectSubrequest|FOSubdocument|FODocument|FOOther|FOXBL,
-  FOUnsupported = FOPing
+    FOObjectSubrequest|FOSubdocument|FODocument|FOOther|FOXBL|FOFont|FOMedia|
+    FOWebRTC|FOWebsocket|FOPing,
+  FOUnsupportedSoSkipCheck = FOPopup|FOCSP|FOElemHide|FOGenericHide|
+    FOGenericBlock|FOEmpty|FOUnknown,
+  // Non matching related filters, alters behavior
+  BehavioralFilterOnly = FORedirect|FOImportant|FOExplicitCancel|
+    FOThirdParty|FONotThirdParty
 };
 
 class Filter {
@@ -61,13 +91,15 @@ friend class AdBlockClient;
   Filter();
   Filter(const Filter &other);
   Filter(const char * data, int dataLen, char *domainList = nullptr,
-      const char * host = nullptr, int hostLen = -1);
+      const char * host = nullptr, int hostLen = -1,
+      char *tag = nullptr, int tagLen = 0);
 
   Filter(FilterType filterType, FilterOption filterOption,
          FilterOption antiFilterOption,
          const char * data, int dataLen,
-         char *domainList = nullptr, const char * host = nullptr,
-         int hostLen = -1);
+         char *domainList = nullptr,
+         const char * host = nullptr, int hostLen = -1,
+         char *tag = nullptr, int tagLen = 0);
 
   ~Filter();
 
@@ -96,7 +128,11 @@ friend class AdBlockClient;
       const char *contextDomain = nullptr);
 
   void parseOptions(const char *input);
-  bool containsDomain(const char *domain, bool anti = false) const;
+
+  // Checks to see if the specified context domain is in the
+  // domain (or antiDmomain) list.
+  bool containsDomain(const char* contextDomain, size_t contextDomainLen,
+      bool anti = false) const;
   // Returns true if the filter is composed of only domains and no anti domains
   // Note that the set of all domain and anti-domain rules are not mutually
   // exclusive.  One xapmle is:
@@ -106,8 +142,6 @@ friend class AdBlockClient;
   // Returns true if the filter is composed of only anti-domains and no domains
   bool isAntiDomainOnlyFilter();
   uint32_t getDomainCount(bool anti = false);
-  // One pass, will calcuate internal member for domainCount and antiDomainCount
-  void calculateDomainCounts();
 
   uint64_t hash() const;
   uint64_t GetHash() const {
@@ -155,21 +189,27 @@ friend class AdBlockClient;
   FilterType filterType;
   FilterOption filterOption;
   FilterOption antiFilterOption;
+
+  // The text of the filter list rule, as it appeared before being parsed.
+  char *ruleDefinition;
+
   char *data;
   int dataLen;
   char *domainList;
+  // A filter tag is used for identifying and tagally including
+  // certain filters in Brave.
+  char *tag;
+  int tagLen;
   char *host;
-  uint32_t domainCount;
-  uint32_t antiDomainCount;
   int hostLen;
+  HashSet<ContextDomain>* domains;
+  HashSet<ContextDomain>* antiDomains;
+  bool domainsParsed;
 
  protected:
-  // Filters the domain list down to what's applicable for the context domain
-  void filterDomainList(const char *domainList, char *destBuffer,
-      const char *contextDomain, bool anti);
-  // Checks for what is not excluded by the opposite list
-  int getLeftoverDomainCount(const char *shouldBlockDomains,
-      const char *shouldSkipDomains);
+  // Fills |domains| and |antiDomains| sets
+  void parseDomains(const char *domainList);
+  bool contextDomainMatchesFilter(const char *contextDomain);
 
   // Parses a single option
   void parseOption(const char *input, int len);

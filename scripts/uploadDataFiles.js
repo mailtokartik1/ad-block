@@ -3,7 +3,7 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 
 const fs = require('fs')
-const s3 = require('s3')
+const s3 = require('s3-client')
 const commander = require('commander')
 const path = require('path')
 const dataFileVersion = 4
@@ -32,8 +32,7 @@ const uploadFile = (key, filePath, filename) => {
     var uploader = client.uploadFile(params)
     process.stdout.write(`Started uploading to: ${params.s3Params.Key}... `)
     uploader.on('error', function (err) {
-      console.error('Unable to upload:', err.stack, 'Do you have ~/.aws/credentials filled out?')
-      reject()
+      reject(new Error(`Unable to upload, do you have ~/.aws/credentials filled out? ${err}`))
     })
     uploader.on('end', function (params) {
       console.log('completed')

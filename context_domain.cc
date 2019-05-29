@@ -3,13 +3,10 @@
  * License, v. 2.0. If a copy of the MPL was not distributed with this
  * file, You can obtain one at http://mozilla.org/MPL/2.0/. */
 
-#ifndef LISTS_MALWARE_H_
-#define LISTS_MALWARE_H_
+#include "./context_domain.h"
+#include "hashFn.h"
 
-#include <vector>
-#include "../filter_list.h"
-
-const std::vector<FilterList> malware_lists = {
-};
-
-#endif  // LISTS_MALWARE_H_
+static HashFn context_domain_hash(19);
+uint64_t ContextDomain::GetHash() const {
+  return context_domain_hash(start_, len_);
+}

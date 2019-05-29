@@ -7,9 +7,10 @@
 #define LISTS_DEFAULT_H_
 
 #include <vector>
+#include <string>
 #include "../filter_list.h"
 
-const std::string kAdBlockDefaultComponentId("cffkpbalmllkdoenhmdmpbkajipdjfam");
+const std::string kAdBlockDefaultComponentId("cffkpbalmllkdoenhmdmpbkajipdjfam");  // NOLINT
 const std::string kAdBlockDefaultBase64PublicKey =
     "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAs0qzJmHSgIiw7IGFCxij"
     "1NnB5hJ5ZQ1LKW9htL4EBOaMJvmqaDs/wfq0nw/goBHWsqqkMBynRTu2Hxxirvdb"
@@ -38,7 +39,7 @@ const std::vector<FilterList> default_lists = {
     ""
   }, {
     "200392E7-9A0F-40DF-86EB-6AF7E4071322",
-    "https://raw.githubusercontent.com/brave/adblock-lists/master/ublock-unbreak.txt", // NOLINT
+    "https://raw.githubusercontent.com/uBlockOrigin/uAssets/master/filters/unbreak.txt", // NOLINT
     "uBlock Unbreak",
     {},
     "https://github.com/gorhill/uBlock",

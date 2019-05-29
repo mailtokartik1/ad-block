@@ -3,7 +3,7 @@
  * You can obtain one at http://mozilla.org/MPL/2.0/. */
 /* global describe, it */
 
-const {makeAdBlockClientFromListUUID} = require('../../lib/util')
+const { makeAdBlockClientFromListUUID } = require('../../lib/util')
 
 const err = new Error()
 describe('utilTest', function () {
@@ -25,13 +25,6 @@ describe('utilTest', function () {
     })
     it('can obtain list from regions list by uuid', function (cb) {
       makeAdBlockClientFromListUUID('9FCEECEC-52B4-4487-8E57-8781E82C91D0').then(() => {
-        cb()
-      }).catch((e) => {
-        cb(err)
-      })
-    })
-    it('can obtain list from malware list by uuid', function (cb) {
-      makeAdBlockClientFromListUUID('AE08317A-778F-4B95-BC12-7E78C1FB26A3').then(() => {
         cb()
       }).catch((e) => {
         cb(err)

@@ -7,6 +7,7 @@
 #include <fstream>
 #include <sstream>
 #include <string>
+#include <vector>
 #include <cerrno>
 #include <algorithm>
 #include <iostream>
@@ -18,6 +19,7 @@
 #include "./util.h"
 
 using std::string;
+using std::vector;
 using std::endl;
 using std::set;
 using std::cout;
@@ -51,8 +53,10 @@ bool testFilter(const char *rawFilter, FilterType expectedFilterType,
   bool ret = true;
   string lastChecked;
   std::for_each(blocked.begin(), blocked.end(),
-      [&filter, &ret, &lastChecked](string const &s) {
-    ret = ret && filter.matches(s.c_str());
+      [&filter, &ret, &lastChecked, &expectedFilterOption](string const &s) {
+    const FilterOption filterOptions = static_cast<FilterOption>(
+            expectedFilterOption & FOResourcesOnly);
+    ret = ret && filter.matches(s.c_str(), filterOptions);
     lastChecked = s;
   });
   if (!ret) {
@@ -61,8 +65,10 @@ bool testFilter(const char *rawFilter, FilterType expectedFilterType,
   }
 
   std::for_each(notBlocked.begin(), notBlocked.end(),
-      [&filter, &ret, &lastChecked](string const &s) {
-    ret = ret && !filter.matches(s.c_str());
+      [&filter, &ret, &lastChecked, &expectedFilterOption](string const &s) {
+    const auto filterOptions = static_cast<FilterOption>(
+            expectedFilterOption & FOResourcesOnly);
+    ret = ret && !filter.matches(s.c_str(), filterOptions);
     lastChecked = s;
   });
   if (!ret) {
@@ -257,7 +263,8 @@ TEST(client, parseFilterMatchesFilter) {
 
 bool checkMatch(const char *rules,
     set<string> &&blocked, // NOLINT
-    set<string> &&notBlocked) { // NOLINT
+    set<string> &&notBlocked, // NOLINT
+    vector<string> &&tags) { // NOLINT
   AdBlockClient clients[2];
   char * buffer = nullptr;
   for (int i = 0; i < 2; i++) {
@@ -270,7 +277,16 @@ bool checkMatch(const char *rules,
       cout << "Deserialization failed" << endl;
       delete[] buffer;
       return false;
+    // The second else clause is for valgrind only
+    } else if (!client.deserialize(buffer)) {
+      cout << "Deserialization failed" << endl;
+      delete[] buffer;
+      return false;
     }
+    std::for_each(tags.begin(), tags.end(),
+        [&client](string const &tag) {
+      client.addTag(tag);
+    });
 
     bool ret = true;
     string lastChecked;
@@ -307,7 +323,7 @@ TEST(client, exceptionRules) {
       "http://example.com/advert.html"
     }, {
       "http://example.com/advice.html",
-    }));
+    }, {}));
 
   CHECK(checkMatch("@@advice.\n"
                    "adv",
@@ -315,7 +331,7 @@ TEST(client, exceptionRules) {
       "http://example.com/advert.html"
     }, {
       "http://example.com/advice.html"
-    }));
+    }, {}));
   CHECK(checkMatch("@@|http://example.com\n"
                    "@@advice.\n"
                    "adv\n"
@@ -327,18 +343,69 @@ TEST(client, exceptionRules) {
       "http://example.com/advert.html",
       "http://examples.com/advice.html",
       "http://examples.com/#!foo",
-    }));
+    }, {}));
   CHECK(checkMatch("/ads/freewheel/*\n"
                    "@@||turner.com^*/ads/freewheel/*/"
                      "AdManager.js$domain=cnn.com",
     {
     }, {
       "http://z.cdn.turner.com/xslo/cvp/ads/freewheel/js/0/AdManager.js",
-    }));
+    }, {}));
   CHECK(checkMatch("^promotion^",
     {
       "http://yahoo.co.jp/promotion/imgs"
+    }, {}, {}));
+
+  CHECK(checkMatch("^ads^",
+    {
+      "http://yahoo.co.jp/ads/imgs",
+      "http://yahoo.co.jp/ads",
+      "http://yahoo.co.jp/ads?xyz",
+      "http://yahoo.co.jp/xyz?ads",
+    }, {
+      "http://yahoo.co.jp/uploads/imgs",
+      "http://yahoo.co.jp/adsx/imgs",
+      "http://yahoo.co.jp/adsshmads/imgs",
+      "ads://ads.co.ads/aads",
     }, {}));
+}
+
+TEST(client, tagTests) {
+  // No matching tags should not match a tagged filter
+  CHECK(checkMatch("adv$tag=stuff\n"
+                   "somelongpath/test$tag=stuff\n"
+                   "||brianbondy.com/$tag=brian\n"
+                   "||brave.com$tag=brian", {}, {
+    "http://example.com/advert.html",
+    "http://example.com/somelongpath/test/2.html",
+    "https://brianbondy.com/about",
+    "https://brave.com/about"
+  }, {}));
+  // A matching tag should match a tagged filter
+  CHECK(checkMatch("adv$tag=stuff\n"
+                   "somelongpath/test$tag=stuff\n"
+                   "||brianbondy.com/$tag=brian\n"
+                   "||brave.com$tag=brian", {
+    "http://example.com/advert.html",
+    "http://example.com/somelongpath/test/2.html",
+    "https://brianbondy.com/about",
+    "https://brave.com/about"
+  }, {}, {
+    "stuff", "brian"
+  }));
+  // A tag which doesn't match shouldn't match
+  CHECK(checkMatch("adv$tag=stuff\n"
+                   "somelongpath/test$tag=stuff\n"
+                   "||brianbondy.com/$tag=brian\n"
+                   "||brave.com$tag=brian", {
+  }, {
+    "http://example.com/advert.html",
+    "http://example.com/somelongpath/test/2.html",
+    "https://brianbondy.com/about",
+    "https://brave.com/about"
+  }, {
+    "filtertag1", "filtertag2"
+  }));
 }
 
 struct OptionRuleData {
@@ -407,10 +474,17 @@ TEST(client, optionRules) {
       OptionRuleData("http://example.com.au", FOScript, "example.com", false),
     }));
 
-  // Make sure we ignore ping requests for now
+  // We should block ping rules if the resource type is FOPing
   CHECK(checkOptionRule("||example.com^$ping",
     {
-      OptionRuleData("http://example.com", FOPing, "example.com", false),
+      OptionRuleData("http://example.com", FOPing, "example.com", true),
+      OptionRuleData("http://example.com", FOImage, "example.com", false),
+    }));
+
+  // Make sure we ignore popup rules for now
+  CHECK(checkOptionRule("||example.com^$popup",
+    {
+      OptionRuleData("http://example.com", FOPopup, "example.com", false),
     }));
 
   CHECK(checkOptionRule("||example.com^$third-party,~script",
@@ -570,10 +644,10 @@ struct ListCounts {
   size_t exceptions;
 };
 
-ListCounts easyList = { 24813, 31144, 0, 5674 };
-ListCounts easyPrivacy = { 11816, 0, 0, 1018 };
-ListCounts ublockUnbreak = { 4, 8, 0, 95 };
-ListCounts braveUnbreak = { 31, 0, 0, 4 };
+ListCounts easyList = { 36342, 32667, 0, 5174 };
+ListCounts easyPrivacy = { 15144, 0, 0, 1202 };
+ListCounts ublockUnbreak = { 133, 106, 0, 494 };
+ListCounts braveUnbreak = { 79, 0, 0, 32 };
 ListCounts disconnectSimpleMalware = { 2450, 0, 0, 0 };
 ListCounts spam404MainBlacklist = { 5629, 166, 0, 0 };
 
@@ -720,7 +794,7 @@ TEST(client, parse_spam404_main_blacklist) {
 
   const char *urlToCheck = "http://excellentmovies.net/";
   const char *currentPageDomain = "excellentmovies.net";
-  CHECK(client.matches(urlToCheck, FODocument, currentPageDomain));
+  CHECK(client.matches(urlToCheck, FOImage, currentPageDomain));
 }
 
 
@@ -894,12 +968,14 @@ TEST(misc, misc2) {
 TEST(serializationTests, serializationTests2) {
   AdBlockClient client;
   client.parse(
-      "||googlesyndication.com$third-party\n@@||googlesyndication.ca");
+      "||googlesyndication.com$third-party\n@@||googlesyndication.ca\na$explicitcancel");
   int size;
   char * buffer = client.serialize(&size);
 
   AdBlockClient client2;
   CHECK(client2.deserialize(buffer));
+  // For valgrind only
+  client2.deserialize(buffer);
 
   Filter f(static_cast<FilterType>(FTHostAnchored | FTHostOnly), FOThirdParty,
       FONoFilterOption, "googlesyndication.com", 21, nullptr,
@@ -920,7 +996,8 @@ TEST(serializationTests, serializationTests2) {
   CHECK(client2.hostAnchoredExceptionHashSet->Exists(f3));
   CHECK(!client.hostAnchoredExceptionHashSet->Exists(f4));
   CHECK(!client2.hostAnchoredExceptionHashSet->Exists(f4));
-
+  CHECK(client.noFingerprintFilters[0].filterOption & FOExplicitCancel);
+  CHECK(client2.noFingerprintFilters[0].filterOption & FOExplicitCancel);
   delete[] buffer;
 }
 
@@ -958,4 +1035,58 @@ TEST(findMatchingFilters, basic) {
   CHECK(matchingExceptionFilter)
   CHECK(!strcmp(matchingFilter->data, "googlesyndication.com/safeframe/"));
   CHECK(!strcmp(matchingExceptionFilter->data, "safeframe"));
+}
+
+// Testing matchingFilter
+TEST(matchesWithFilterInfo, basic) {
+  AdBlockClient client;
+  client.parse("||googlesyndication.com/safeframe/$third-party\n"
+      "||brianbondy.com/ads");
+  const char *urlToCheck =
+    "http://tpc.googlesyndication.com/safeframe/1-0-2/html/container.html";
+  const char *currentPageDomain = "slashdot.org";
+
+  Filter none;
+  Filter *matchingFilter = &none;
+  Filter *matchingExceptionFilter = &none;
+
+  // Test finds a match
+  CHECK(client.matches(urlToCheck, FOScript, currentPageDomain,
+    &matchingFilter, &matchingExceptionFilter));
+  CHECK(matchingFilter)
+  CHECK(matchingExceptionFilter == nullptr)
+  CHECK(!strcmp(matchingFilter->data, "googlesyndication.com/safeframe/"));
+
+  // Test when no filter is found, returns false and sets out params to nullptr
+  CHECK(!client.matches("ssafsdf.com", FOScript, currentPageDomain,
+    &matchingFilter, &matchingExceptionFilter));
+  CHECK(matchingFilter == nullptr)
+  CHECK(matchingExceptionFilter == nullptr)
+
+  // Parse that it finds exception filters correctly
+  client.parse("@@safeframe\n");
+  CHECK(!client.matches(urlToCheck, FOScript, currentPageDomain,
+    &matchingFilter, &matchingExceptionFilter));
+  CHECK(matchingFilter)
+  CHECK(matchingExceptionFilter)
+  CHECK(!strcmp(matchingFilter->data, "googlesyndication.com/safeframe/"));
+  CHECK(!strcmp(matchingExceptionFilter->data, "safeframe"));
+
+  // Preserves explicitcancel and important options when matching
+  client.clear();
+  client.parse("||brianbondy.com^$explicitcancel");
+  bool matches = (client.matches("https://brianbondy.com/t", FOScript, "test.com",
+    &matchingFilter, &matchingExceptionFilter));
+  CHECK(matches)
+  CHECK(matchingFilter)
+  CHECK(matchingFilter->filterOption & FOExplicitCancel)
+  CHECK(!matchingExceptionFilter)
+
+  client.clear();
+  client.parse("||brianbondy.com^$important");
+  CHECK(client.matches("https://brianbondy.com/t", FOScript, "test.com",
+    &matchingFilter, &matchingExceptionFilter))
+  CHECK(matchingFilter)
+  CHECK(matchingFilter->filterOption & FOImportant)
+  CHECK(!matchingExceptionFilter)
 }

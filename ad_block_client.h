@@ -6,6 +6,8 @@
 #ifndef AD_BLOCK_CLIENT_H_
 #define AD_BLOCK_CLIENT_H_
 
+#include <string>
+#include <set>
 #include "./filter.h"
 
 class CosmeticFilter;
@@ -22,15 +24,21 @@ class AdBlockClient {
   ~AdBlockClient();
 
   void clear();
-  bool parse(const char *input);
-  bool matches(const char *input,
+//   bool parse(const char *input);
+  bool parse(const char *input, bool preserveRules = false);
+  bool matches(const char* input,
       FilterOption contextOption = FONoFilterOption,
-      const char *contextDomain = nullptr);
+      const char* contextDomain = nullptr,
+      Filter** matchedFilter = nullptr,
+      Filter** matchedExceptionFilter = nullptr);
   bool findMatchingFilters(const char *input,
       FilterOption contextOption,
       const char *contextDomain,
       Filter **matchingFilter,
       Filter **matchingExceptionFilter);
+  void addTag(const std::string &tag);
+  void removeTag(const std::string &tag);
+  bool tagExists(const std::string &tag) const;
   // Serializes a the parsed data and bloom filter data into a single buffer.
   // The returned buffer should be deleted.
   char * serialize(int *size,
@@ -101,25 +109,37 @@ class AdBlockClient {
       int inputLen, FilterOption contextOption, const char *contextDomain,
       BloomFilter *inputBloomFilter, const char *inputHost, int inputHostLen,
       Filter **matchingFilter = nullptr);
+  bool isHostAnchoredHashSetMiss(const char *input, int inputLen,
+    HashSet<Filter> *hashSet,
+    const char *inputHost,
+    int inputHostLen,
+    FilterOption contextOption,
+    const char *contextDomain,
+    Filter **foundFilter = nullptr);
+
   void initBloomFilter(BloomFilter**, const char *buffer, int len);
   template<class T>
   bool initHashSet(HashSet<T>**, char *buffer, int len);
   char *deserializedBuffer;
+  std::set<std::string> tags;
 };
 
+extern std::set<std::string> unknownOptions;
 extern const char *separatorCharacters;
 void parseFilter(const char *input, const char *end, Filter *f,
     BloomFilter *bloomFilter = nullptr,
     BloomFilter *exceptionBloomFilter = nullptr,
     HashSet<Filter> *hostAnchoredHashSet = nullptr,
     HashSet<Filter> *hostAnchoredExceptionHashSet = nullptr,
-    HashSet<CosmeticFilter> *simpleCosmeticFilters = nullptr);
+    HashSet<CosmeticFilter> *simpleCosmeticFilters = nullptr,
+    bool preserveRules = false);
 void parseFilter(const char *input, Filter *f,
     BloomFilter *bloomFilter = nullptr,
     BloomFilter *exceptionBloomFilter = nullptr,
     HashSet<Filter> *hostAnchoredHashSet = nullptr,
     HashSet<Filter> *hostAnchoredExceptionHashSet = nullptr,
-    HashSet<CosmeticFilter> *simpleCosmeticFilters = nullptr);
+    HashSet<CosmeticFilter> *simpleCosmeticFilters = nullptr,
+    bool preserveRules = false);
 bool isSeparatorChar(char c);
 int findFirstSeparatorChar(const char *input, const char *end);
 

@@ -1,6 +1,6 @@
 {
   "targets": [{
-    "target_name": "test",
+    "target_name": "ad-block-test",
     "type": "executable",
     "sources": [
       "../test/test_main.cc",
@@ -9,15 +9,21 @@
       "../test/rule_types_test.cc",
       "../test/cosmetic_filter_test.cc",
       "../test/protocol_test.cc",
+      "../test/orig_filters_test.cc",
+      "../test/serialization_test.cc",
       "../test/util.cc",
       "../protocol.cc",
       "../protocol.h",
       "../ad_block_client.cc",
       "../ad_block_client.h",
+      "../context_domain.cc",
+      "../context_domain.h",
       "../cosmetic_filter.cc",
       "../cosmetic_filter.h",
       "../filter.cc",
       "../filter.h",
+      "../filter_list.cc",
+      "../filter_list.h",
       "../no_fingerprint_domain.cc",
       "../no_fingerprint_domain.h",
       "../node_modules/bloom-filter-cpp/BloomFilter.cpp",
@@ -55,6 +61,7 @@
       "OTHER_LDFLAGS": ["-stdlib=libc++"],
       "MACOSX_DEPLOYMENT_TARGET": "10.9",
       "GCC_ENABLE_CPP_EXCEPTIONS": "YES",
+      "ARCHS": ["x86_64"]
     },
     "cflags": [
       "-std=c++11"
